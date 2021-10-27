@@ -1,0 +1,90 @@
+#список команд с сервера:
+ln -s /usr/share/data-minor-bioinf/assembly/oil_R1.fastq
+ln -s /usr/share/data-minor-bioinf/assembly/oil_R2.fastq
+ln -s /usr/share/data-minor-bioinf/assembly/oilMP_S4_L001_R1_001.fastq
+ln -s /usr/share/data-minor-bioinf/assembly/oilMP_S4_L001_R2_001.fastq
+seqtk sample -s928 oil_R1.fastq 5000000 > oil_R1_sample.fastq
+seqtk sample -s928 oil_R2.fastq 5000000 > oil_R2_sample.fastq
+seqtk sample -s928 oilMP_S4_L001_R1_001.fastq 1500000 > oilMP_S4_L001_R1_001_sample.fastq
+seqtk sample -s928 oilMP_S4_L001_R2_001.fastq 1500000 > oilMP_S4_L001_R2_001_sample.fastq
+rm oil_R1.fastq
+rm oil_R2.fastq
+rm oilMP_S4_L001_R1_001.fastq
+rm oilMP_S4_L001_R2_001.fastq
+mkdir fastqc
+ls *.fastq | xargs -P 4 -tI{} fastqc -o fastqc {}
+mkdir multiqc
+multiqc -o multiqc fastqc
+platanus_trim oil_R1_sample.fastq oil_R2_sample.fastq
+platanus_internal_trim oilMP_S4_L001_R1_001_sample.fastq oilMP_S4_L001_R2_001_sample.fastq
+rm oilMP_S4_L001_R1_001_sample.fastq
+rm oil_R2_sample.fastq
+rm oilMP_S4_L001_R2_001_sample.fastq
+rm oil_R1_sample.fastq
+mkdir trimmed_fastq
+mv -v *trimmed trimmed_fastq/
+mkdir trimmed_fastqc
+ls trimmed_fastq/* | xargs -P 4 -tI{} fastqc -o trimmed_fastqc {}
+mkdir trimmed_multiqc
+multiqc -o trimmed_multiqc trimmed_fastqc
+time platanus assemble -o Poil -t 1 -m 25 -f trimmed_fastq/oil_R1.fastq.trimmed trimmed_fastq/oil_R2.fastq.trimmed 2> assemble.log
+time platanus scaffold -o Poil -t 1 -c Poil_contig.fa -IPl trimmed_fastq/oil_R1_sample.fastq.trimmed trimmed_fastq/oil_R2_sample.fastq.trimmed -OP2 trimmed_fastq/oilMP_S4_L001_R1_001_sample.fastq.int_trimmed trimmed_fastq/oilMP_S4_L001_R2_001_sample.fastq.int_trimmed 2> scaffold.log
+head Poil_scaffold.fa
+echo scaffold1_len3838373_cov231 > _tmp.txt
+seqtk subseq Poil_scaffold.fa _tmp.txt > scaffold1_len3838373_cov231.fasta
+tail -n +2 scaffold1_len3838373_cov231.fasta | perl -pe 's/[ACTG]+/\n/gi;' | grep -e 'N' | wc -l
+tail -n +2 scaffold1_len3838373_cov231.fasta | perl -pe 's/[ACTG]+//gi;' | wc
+time platanus gap_close -o Poil -t 1 -c Poil_scaffold.fa -IPl trimmed_fastq/oil_R1_sample.fastq.trimmed trimmed_fastq/oil_R2_sample.fastq.trimmed -OP2 trimmed_fastq/oilMP_S4_L001_R1_001_sample.fastq.int_trimmed trimmed_fastq/oilMP_S4_L001_R2_001_sample.fastq.int_trimmed 2> gapclose.log
+head Poil_gapClosed.fa
+echo scaffold1_cov231 > _tmp.txt
+seqtk subseq Poil_gapClosed.fa _tmp.txt > oil_genome.fna
+tail -n +2 oil_genome.fna | perl -pe 's/[ACGT\n\r]+/\n/gi;' | grep -e 'N' | wc -l
+tail -n +2 oil_genome.fna | perl -pe 's/[ACGT\n\r]+//gi;' | wc
+#Список команд Python
+!pip install biopython
+from Bio import SeqIO
+contigs = list(SeqIO.parse('Poil_contig.fa', 'fasta'))
+a = len(contigs)
+print('Общее число контигов:', a)
+j = 0
+l = list()
+for i in range (a):
+  b = contigs[i].seq
+  c = len(b)
+  j = j + int(c)
+  l.append(int(c))
+print('Общая длина контигов:', j)
+l.sort(reverse = True)
+print('Длина самого длинного контига:', l[0])
+n = j/2
+m = 0
+v = 0
+n50 = 0
+while m <= n:
+  m = m + l[v]
+  v += 1
+  n50 = l[v]
+print('N50:', n50)
+
+scaff = list(SeqIO.parse('Poil_gapClosed.fa', 'fasta'))
+a1 = len(scaff)
+print('Общее число скаффолдов:', a)
+j1 = 0
+l1 = list()
+for i1 in range (a1):
+  b1 = scaff[i1].seq
+  c1 = len(b1)
+  j1 = j1 + int(c1)
+  l1.append(int(c1))
+print('Общая длина скаффолдов:', j1 )
+l1.sort(reverse = True)
+print('Длина самого длинного скаффолда:', l1[0])
+n1 = j1/2
+m1 = 0
+v1 = 0
+n50_1 = 0
+while m1 <= n1:
+  m1 = m1 + l1[v1]
+  v1 += 1
+  n50_1 = l1[v1]
+print('N50:', n50_1)
